@@ -30,15 +30,36 @@ def webhook():
         symbol = data.get("pair")
         signal = data.get("signal")
 
+        if not symbol or not signal:
+            return jsonify({"error": "Eksik veri"}), 400
+
         if symbol not in ALLOWED_PAIRS:
             return jsonify({"error": f"İzin verilen çiftler arasında değil: {symbol}"}), 400
 
         if signal == "AL":
-            # İşlem mantığı burada yer alacak
-            return jsonify({"success": True, "message": f"{symbol} için AL sinyali alındı"}), 200
+            try:
+                client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
+                order = client.futures_create_order(
+                    symbol=symbol,
+                    side=SIDE_BUY,
+                    type=ORDER_TYPE_MARKET,
+                    quantity=POSITION_SIZE_USDT
+                )
+                return jsonify({"success": True, "message": f"{symbol} için AL sinyali işlendi", "order": order}), 200
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
         elif signal == "SAT":
-            # İşlem mantığı burada yer alacak
-            return jsonify({"success": True, "message": f"{symbol} için SAT sinyali alındı"}), 200
+            try:
+                client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
+                order = client.futures_create_order(
+                    symbol=symbol,
+                    side=SIDE_SELL,
+                    type=ORDER_TYPE_MARKET,
+                    quantity=POSITION_SIZE_USDT
+                )
+                return jsonify({"success": True, "message": f"{symbol} için SAT sinyali işlendi", "order": order}), 200
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
         else:
             return jsonify({"error": "Geçersiz sinyal"}), 400
     except Exception as e:
