@@ -2,3 +2,4 @@ flask
 gunicorn
 python-binance
 logging
+python-dotenv
