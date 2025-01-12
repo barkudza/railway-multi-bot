@@ -1,3 +1,5 @@
+import os
+import requests
 from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
@@ -9,11 +11,18 @@ app = Flask(__name__)
 API_KEY = "fKpytFYxYTigkaS7QN0AGGDLAYwCEjHpAGWdrvg9FVKWJOd6rqrbXpJiMxmF9A6E"  # Binance API anahtarınızı buraya ekleyin
 API_SECRET = "1rGYNrn1BH14svjoWKC761Xh5zhA1i7B7mhjCCj9xOYL7TGzFniocsHhIDFmF2WO"  # Binance Secret anahtarınızı buraya ekleyin
 
+# Proxy Ayarları
+session = requests.Session()
+session.proxies = {
+    'http': 'http://188.132.222.40:8080',
+    'https': 'http://188.132.222.40:8080',
+}
+
 # Binance Client
-client = Client(API_KEY, API_SECRET)
+client = Client(API_KEY, API_SECRET, requests_params={"session": session})
 
 # İşleme Girecek Coin Çiftleri
-ALLOWED_PAIRS = ["BTCUSDT", "SUIUSDT", "COOKIEUSDT", "CGPTUSDT", "AVAXUSDT", "MOVEUSDT", "SOLUSDT", "USUALUSDT", "EIGENUSDT", "PENGUUSDT", "BIOUSDT", "AGLDUSDT", "XRPUSDT", "HIVEUSDT"]
+ALLOWED_PAIRS = ["BTCUSDT", "SUIUSDT"]
 
 # Bot Ayarları
 POSITION_SIZE_USDT = 20  # İşlem başına kullanılacak bakiye
@@ -66,4 +75,5 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
