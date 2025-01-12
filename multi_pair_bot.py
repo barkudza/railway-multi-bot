@@ -7,19 +7,18 @@ from binance.enums import *
 app = Flask(__name__)
 
 # Binance API Keys
-API_KEY = "fKpytFYxYTigkaS7QN0AGGDLAYwCEjHpAGWdrvg9FVKWJOd6rqrbXpJiMxmF9A6E"  # Binance API anahtarınızı buraya ekleyin
-API_SECRET = "1rGYNrn1BH14svjoWKC761Xh5zhA1i7B7mhjCCj9xOYL7TGzFniocsHhIDFmF2WO"  # Binance Secret anahtarınızı buraya ekleyin
-
+API_KEY = os.getenv("API_KEY")  # Çevresel değişkenden API anahtarı
+API_SECRET = os.getenv("API_SECRET")  # Çevresel değişkenden API secret
 
 # Binance Client
 client = Client(API_KEY, API_SECRET)
 
 # İşleme Girecek Coin Çiftleri
-ALLOWED_PAIRS = ["BTCUSDT", "SUIUSDT"]
+ALLOWED_PAIRS = ["BTCUSDT", "SUIUSDT", "COOKIEUSDT", "CGPTUSDT", "AVAXUSDT", "MOVEUSDT", "SOLUSDT", "USUALUSDT", "EIGENUSDT", "PENGUUSDT", "BIOUSDT", "AGLDUSDT", "XRPUSDT", "HIVEUSDT"]
 
 # Bot Ayarları
-POSITION_SIZE_USDT = 20  # İşlem başına kullanılacak bakiye
-LEVERAGE = 10  # Kaldıraç oranı
+POSITION_SIZE_USDT = 10  # İşlem başına kullanılacak bakiye
+LEVERAGE = 15  # Kaldıraç oranı
 
 @app.route('/')
 def home():
