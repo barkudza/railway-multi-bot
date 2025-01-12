@@ -1,5 +1,4 @@
 import os
-import requests
 from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
@@ -11,15 +10,9 @@ app = Flask(__name__)
 API_KEY = "fKpytFYxYTigkaS7QN0AGGDLAYwCEjHpAGWdrvg9FVKWJOd6rqrbXpJiMxmF9A6E"  # Binance API anahtarınızı buraya ekleyin
 API_SECRET = "1rGYNrn1BH14svjoWKC761Xh5zhA1i7B7mhjCCj9xOYL7TGzFniocsHhIDFmF2WO"  # Binance Secret anahtarınızı buraya ekleyin
 
-# Proxy Ayarları
-session = requests.Session()
-session.proxies = {
-    'http': 'http://188.132.222.40:8080',
-    'https': 'http://188.132.222.40:8080',
-}
 
 # Binance Client
-client = Client(API_KEY, API_SECRET, requests_params={"session": session})
+client = Client(API_KEY, API_SECRET)
 
 # İşleme Girecek Coin Çiftleri
 ALLOWED_PAIRS = ["BTCUSDT", "SUIUSDT"]
