@@ -3,12 +3,9 @@ from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
 
-# Flask App
-app = Flask(__name__)
-
-# Binance API Keys
-API_KEY = os.getenv("API_KEY")  # Çevresel değişkenden API anahtarı
-API_SECRET = os.getenv("API_SECRET")  # Çevresel değişkenden API secret
+# Çevresel Değişkenlerden API Anahtarlarını Alın
+API_KEY = os.getenv("API_KEY")
+API_SECRET = os.getenv("API_SECRET")
 
 # Binance Client
 client = Client(API_KEY, API_SECRET)
@@ -19,6 +16,8 @@ ALLOWED_PAIRS = ["BTCUSDT", "SUIUSDT", "COOKIEUSDT", "CGPTUSDT", "AVAXUSDT", "MO
 # Bot Ayarları
 POSITION_SIZE_USDT = 10  # İşlem başına kullanılacak bakiye
 LEVERAGE = 15  # Kaldıraç oranı
+
+app = Flask(__name__)
 
 @app.route('/')
 def home():
@@ -37,6 +36,29 @@ def webhook():
         if symbol not in ALLOWED_PAIRS:
             return jsonify({"error": f"İzin verilen çiftler arasında değil: {symbol}"}), 400
 
+        # Mevcut pozisyonu kontrol edin
+        positions = client.futures_position_information()
+        current_position = None
+        for position in positions:
+            if position['symbol'] == symbol:
+                current_position = position
+                break
+
+        # Pozisyon kapatma ve ters işlem açma
+        if current_position and float(current_position['positionAmt']) != 0:
+            try:
+                # Mevcut pozisyonu kapat
+                side_to_close = SIDE_SELL if float(current_position['positionAmt']) > 0 else SIDE_BUY
+                client.futures_create_order(
+                    symbol=symbol,
+                    side=side_to_close,
+                    type=ORDER_TYPE_MARKET,
+                    quantity=abs(float(current_position['positionAmt']))
+                )
+            except Exception as e:
+                return jsonify({"error": f"Pozisyon kapatılamadı: {str(e)}"}), 500
+
+        # Yeni işlem aç
         if signal == "AL":
             try:
                 client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
