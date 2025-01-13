@@ -16,10 +16,10 @@ API_SECRET = os.getenv("API_SECRET")
 client = Client(API_KEY, API_SECRET)
 
 # İşleme Girecek Coin Çiftleri
-ALLOWED_PAIRS = ["XRPUSDT", "CGPTUSDT"]  # İşlem yapmak istediğiniz çiftler
+ALLOWED_PAIRS = ["XRPUSDT", "ZEREBROUSDT", "AGLDUSDT", "PNUTUSDT", "COOKIEUSDT", "CGPTUSDT"]  # İşlem yapmak istediğiniz çiftler
 
 # Bot Settings
-POSITION_SIZE_USDT = 10  # Her işlem için kullanılacak bakiye (dolar)
+POSITION_SIZE_USDT = 20  # Her işlem için kullanılacak bakiye (dolar)
 LEVERAGE = 10  # Kaldıraç oranı
 
 # Set Logging
