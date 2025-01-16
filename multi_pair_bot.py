@@ -20,8 +20,8 @@ ALLOWED_PAIRS = ["BTCUSDT", "XRPUSDT", "DOGEUSDT", "SOLUSDT", "SUIUSDT", "AVAXUS
 ]  # İşlem yapmak istediğiniz çiftler
 
 # Bot Settings
-POSITION_SIZE_USDT = 40  # Her işlem için kullanılacak bakiye (dolar)
-LEVERAGE = 10  # Kaldıraç oranı
+POSITION_SIZE_USDT = 50  # Her işlem için kullanılacak bakiye (dolar)
+LEVERAGE = 12  # Kaldıraç oranı
 
 # Set Logging
 logging.basicConfig(level=logging.INFO)
