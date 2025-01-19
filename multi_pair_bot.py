@@ -3,7 +3,6 @@ from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
 import logging
-import time
 
 # Flask App
 app = Flask(__name__)
@@ -16,13 +15,12 @@ API_SECRET = os.getenv("API_SECRET")
 client = Client(API_KEY, API_SECRET)
 
 # İşleme Girecek Coin Çiftleri
-ALLOWED_PAIRS = ["BTCUSDT", "XRPUSDT", "DOGEUSDT", "SOLUSDT", "SUIUSDT", "1000SHIBUSDT", "ONDOUSDT", "FARTCOINUSDT", "1000PEPEUSDT", "COWUSDT", "TURBOUSDT", "ALGOUSDT", "ADAUSDT", "LINKUSDT", "TRXUSDT", "DEXEUSDT", "DOTUSDT", "XLMUSDT", "ZENUSDT", "VETUSDT", "AIXBTUSDT", "JASMYUSDT", "HBARUSDT", "COOKIEUSDT", "CGPTUSDT", "MOVEUSDT", "WLDUSDT", "COWUSDT", "BIOUSDT", "AGLDUSDT", "LQTYUSDT", "BONKUSDT", "PNUTUSDT", "GOATUSDT", "VIRTUALUSDT", "ZEREBROUSDT", "JUPUSDT", "VVAIFUUSDT", "SONICUSDT", "VELODROMEUSDT", "VANAUSDT", "PENGUUSDT", "FETUSDT", "FARTCOINUSDT"
-]  # İşlem yapmak istediğiniz çiftler
+ALLOWED_PAIRS = ["BTCUSDT", "XRPUSDT", "DOGEUSDT", "SOLUSDT", "FARTCOINUSDT"]
 
 # Bot Settings
 POSITION_SIZE_USDT = 10  # Her işlem için kullanılacak bakiye (dolar)
 LEVERAGE = 15  # Kaldıraç oranı
-STOP_LOSS_PERCENT = 0.006  # %06 zarar stop-loss
+STOP_LOSS_PERCENT = 0.006  # %0.6 zarar stop-loss
 TAKE_PROFIT_PERCENT = 0.05  # %5 kâr take-profit
 
 # Logging Settings
@@ -46,56 +44,57 @@ def set_leverage(symbol):
     except Exception as e:
         logging.error(f"Error setting leverage for {symbol}: {e}")
 
-# Open Long Position
-def open_long_position(symbol):
+# Open Long Position with Stop Loss and Take Profit
+def open_long_position_with_stop_and_take_profit(symbol):
     try:
-        price = float(client.futures_symbol_ticker(symbol=symbol)['price'])
-        
-        # İşlem miktarını hesapla
-        quantity = (POSITION_SIZE_USDT * LEVERAGE) / price
+        # Get current price
+        entry_price = float(client.futures_symbol_ticker(symbol=symbol)["price"])
 
-        # Minimum miktar kontrolü
+        # Calculate quantity
+        quantity = (POSITION_SIZE_USDT * LEVERAGE) / entry_price
         precision, min_qty = get_symbol_precision(symbol)
         quantity = max(round(quantity, precision), min_qty)
-        
+
+        # Open long position
         set_leverage(symbol)
-        order = client.futures_create_order(
+        client.futures_create_order(
             symbol=symbol,
             side=SIDE_BUY,
             type=ORDER_TYPE_MARKET,
             quantity=quantity,
         )
-        logging.info(f"Long position opened for {symbol}: {order}")
+        logging.info(f"Long position opened for {symbol} with quantity {quantity}.")
 
-        # Stop-loss ve take-profit emirleri ekle
-        stop_loss_price = round(price * (1 - STOP_LOSS_PERCENT), 2)
-        take_profit_price = round(price * (1 + TAKE_PROFIT_PERCENT), 2)
+        # Place stop loss and take profit orders
+        stop_loss_price = entry_price * (1 - STOP_LOSS_PERCENT)
+        take_profit_price = entry_price * (1 + TAKE_PROFIT_PERCENT)
 
         client.futures_create_order(
             symbol=symbol,
             side=SIDE_SELL,
             type=ORDER_TYPE_STOP_MARKET,
-            stopPrice=stop_loss_price,
+            stopPrice=round(stop_loss_price, precision),
             quantity=quantity,
         )
-        logging.info(f"Stop-loss set at {stop_loss_price} for {symbol}")
+        logging.info(f"Stop loss set at {stop_loss_price} for {symbol}.")
 
         client.futures_create_order(
             symbol=symbol,
             side=SIDE_SELL,
             type=ORDER_TYPE_LIMIT,
-            price=take_profit_price,
-            timeInForce="GTC",
+            price=round(take_profit_price, precision),
+            timeInForce=TIME_IN_FORCE_GTC,
             quantity=quantity,
         )
-        logging.info(f"Take-profit set at {take_profit_price} for {symbol}")
+        logging.info(f"Take profit set at {take_profit_price} for {symbol}.")
 
     except Exception as e:
-        logging.error(f"Error opening long position for {symbol}: {e}")
+        logging.error(f"Error opening position for {symbol}: {e}")
+
 # Close Long Position
 def close_long_position(symbol):
     try:
-        # Mevcut long pozisyon miktarını al
+        # Get current position quantity
         positions = client.futures_position_information()
         for position in positions:
             if position["symbol"] == symbol and float(position["positionAmt"]) > 0:
@@ -106,7 +105,7 @@ def close_long_position(symbol):
                     type=ORDER_TYPE_MARKET,
                     quantity=quantity,
                 )
-                logging.info(f"Long position closed for {symbol}: {quantity}")
+                logging.info(f"Long position closed for {symbol} with quantity {quantity}.")
                 return
         logging.info(f"No long position to close for {symbol}.")
     except Exception as e:
@@ -127,14 +126,13 @@ def webhook():
         logging.error(f"Pair {symbol} is not allowed.")
         return jsonify({"error": "Pair not allowed"}), 400
 
-    # SELL sinyali geldiğinde sadece long pozisyonu kapat
     if signal == "SAT":
         close_long_position(symbol)
         logging.info(f"SELL signal received for {symbol}. Long position closed.")
     elif signal == "AL":
-        open_long_position(symbol)
-        logging.info(f"BUY signal received for {symbol}. Long position opened.")
-    
+        open_long_position_with_stop_and_take_profit(symbol)
+        logging.info(f"BUY signal received for {symbol}. Long position opened with stop loss and take profit.")
+
     return jsonify({"success": True}), 200
 
 if __name__ == "__main__":
