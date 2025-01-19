@@ -22,17 +22,11 @@ ALLOWED_PAIRS = ["BTCUSDT", "XRPUSDT", "DOGEUSDT", "SOLUSDT", "SUIUSDT", "1000SH
 # Bot Settings
 POSITION_SIZE_USDT = 10  # Her işlem için kullanılacak bakiye (dolar)
 LEVERAGE = 15  # Kaldıraç oranı
+STOP_LOSS_PERCENT = 0.02  # %2 zarar stop-loss
+TAKE_PROFIT_PERCENT = 0.05  # %5 kâr take-profit
 
-# Set Logging
+# Logging Settings
 logging.basicConfig(level=logging.INFO)
-
-# Set Leverage for All Pairs
-def set_leverage(symbol):
-    try:
-        response = client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
-        logging.info(f"Leverage set to {LEVERAGE}x for {symbol}: {response}")
-    except Exception as e:
-        logging.error(f"Error setting leverage for {symbol}: {e}")
 
 # Get Symbol Precision
 def get_symbol_precision(symbol):
@@ -44,92 +38,82 @@ def get_symbol_precision(symbol):
                     return int(f['stepSize'].find('1') - 1), float(f['minQty'])
     return 2, 0.1
 
-# Close Position
-def close_position(position_side, symbol):
+# Set Leverage for All Pairs
+def set_leverage(symbol):
     try:
-        quantity = get_position_quantity(symbol)
-        if quantity > 0:
-            client.futures_create_order(
-                symbol=symbol,
-                side=SIDE_BUY if position_side == "SELL" else SIDE_SELL,
-                type=ORDER_TYPE_MARKET,
-                quantity=quantity,
-            )
-            logging.info(f"{position_side} position closed for {symbol}.")
-        else:
-            logging.info(f"No position to close for {symbol}.")
+        response = client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
+        logging.info(f"Leverage set to {LEVERAGE}x for {symbol}: {response}")
     except Exception as e:
-        logging.error(f"Error closing position for {symbol}: {e}")
+        logging.error(f"Error setting leverage for {symbol}: {e}")
 
-# Get Position Quantity
-def get_position_quantity(symbol):
-    positions = client.futures_position_information()
-    for position in positions:
-        if position["symbol"] == symbol:
-            return abs(float(position["positionAmt"]))
-    return 0
-
-# Open Position
-def open_position(side, symbol):
+# Open Long Position
+def open_long_position(symbol):
     try:
-        # Coin fiyatını al
-        price = float(client.futures_symbol_ticker(symbol=symbol)["price"])
+        price = float(client.futures_symbol_ticker(symbol=symbol)['price'])
         
-        # İşlem miktarını hesapla (10 USDT)
+        # İşlem miktarını hesapla
         quantity = (POSITION_SIZE_USDT * LEVERAGE) / price
+
+        # Minimum miktar kontrolü
+        precision, min_qty = get_symbol_precision(symbol)
+        quantity = max(round(quantity, precision), min_qty)
         
-        # Coin miktarının Binance minimum miktarını kontrol et
-        PRECISION, MIN_QUANTITY = get_symbol_precision(symbol)
-        quantity = round(quantity, PRECISION)
-        if quantity < MIN_QUANTITY:
-            logging.error(f"Calculated quantity ({quantity}) is less than the minimum allowed for {symbol}.")
-            return
-        
-        # Kaldıraç ayarını kontrol et
         set_leverage(symbol)
-        
-        # İşlem aç
         order = client.futures_create_order(
             symbol=symbol,
-            side=side,
+            side=SIDE_BUY,
             type=ORDER_TYPE_MARKET,
             quantity=quantity,
         )
-        logging.info(f"{side} position opened for {symbol}: {order}")
-    except Exception as e:
-        logging.error(f"Error opening position for {symbol}: {e}")
+        logging.info(f"Long position opened for {symbol}: {order}")
 
-# Webhook
+        # Stop-loss ve take-profit emirleri ekle
+        stop_loss_price = round(price * (1 - STOP_LOSS_PERCENT), 2)
+        take_profit_price = round(price * (1 + TAKE_PROFIT_PERCENT), 2)
+
+        client.futures_create_order(
+            symbol=symbol,
+            side=SIDE_SELL,
+            type=ORDER_TYPE_STOP_MARKET,
+            stopPrice=stop_loss_price,
+            quantity=quantity,
+        )
+        logging.info(f"Stop-loss set at {stop_loss_price} for {symbol}")
+
+        client.futures_create_order(
+            symbol=symbol,
+            side=SIDE_SELL,
+            type=ORDER_TYPE_LIMIT,
+            price=take_profit_price,
+            timeInForce="GTC",
+            quantity=quantity,
+        )
+        logging.info(f"Take-profit set at {take_profit_price} for {symbol}")
+
+    except Exception as e:
+        logging.error(f"Error opening long position for {symbol}: {e}")
+
+# Webhook Route
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
-    symbol = data.get("pair")  # Sinyaldeki işlem çifti (ör. BTCUSDT veya BTCUSDT.P)
-    signal = data.get("signal")  # Sinyal türü (AL veya SAT)
+    symbol = data.get("pair")
+    signal = data.get("signal")
 
     if not symbol or not signal:
-        logging.error("Invalid signal or pair in webhook data.")
+        logging.error("Invalid data received.")
         return jsonify({"error": "Invalid data"}), 400
 
-    # ".P" gibi ekleri temizle
-    symbol = symbol.replace(".P", "")
-
-    # İşlem çifti kontrolü
     if symbol not in ALLOWED_PAIRS:
         logging.error(f"Pair {symbol} is not allowed.")
         return jsonify({"error": "Pair not allowed"}), 400
 
-    set_leverage(symbol)  # Kaldıraç ayarla
-
-    if signal == "AL":  # BUY sinyali geldiğinde
-        close_position("SELL", symbol)  # Short pozisyonu kapat
-        time.sleep(2)  # İşlemler arasında bekleme süresi
-        open_position(SIDE_BUY, symbol)  # Long pozisyon aç
-    elif signal == "SAT":  # SELL sinyali geldiğinde
-        close_position("BUY", symbol)  # Long pozisyonu kapat
-        time.sleep(2)  # İşlemler arasında bekleme süresi
-        open_position(SIDE_SELL, symbol)  # Short pozisyon aç
+    if signal == "AL":
+        open_long_position(symbol)
+    elif signal == "SAT":
+        logging.info(f"SELL signal received for {symbol}, but short positions are disabled.")
 
     return jsonify({"success": True}), 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+    app.run(host="0.0.0.0", port=5000)
