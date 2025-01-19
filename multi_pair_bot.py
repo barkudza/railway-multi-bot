@@ -92,6 +92,25 @@ def open_long_position(symbol):
 
     except Exception as e:
         logging.error(f"Error opening long position for {symbol}: {e}")
+# Close Long Position
+def close_long_position(symbol):
+    try:
+        # Mevcut long pozisyon miktarını al
+        positions = client.futures_position_information()
+        for position in positions:
+            if position["symbol"] == symbol and float(position["positionAmt"]) > 0:
+                quantity = abs(float(position["positionAmt"]))
+                client.futures_create_order(
+                    symbol=symbol,
+                    side=SIDE_SELL,
+                    type=ORDER_TYPE_MARKET,
+                    quantity=quantity,
+                )
+                logging.info(f"Long position closed for {symbol}: {quantity}")
+                return
+        logging.info(f"No long position to close for {symbol}.")
+    except Exception as e:
+        logging.error(f"Error closing long position for {symbol}: {e}")
 
 # Webhook Route
 @app.route("/webhook", methods=["POST"])
@@ -108,11 +127,14 @@ def webhook():
         logging.error(f"Pair {symbol} is not allowed.")
         return jsonify({"error": "Pair not allowed"}), 400
 
-    if signal == "AL":
+    # SELL sinyali geldiğinde sadece long pozisyonu kapat
+    if signal == "SAT":
+        close_long_position(symbol)
+        logging.info(f"SELL signal received for {symbol}. Long position closed.")
+    elif signal == "AL":
         open_long_position(symbol)
-    elif signal == "SAT":
-        logging.info(f"SELL signal received for {symbol}, but short positions are disabled.")
-
+        logging.info(f"BUY signal received for {symbol}. Long position opened.")
+    
     return jsonify({"success": True}), 200
 
 if __name__ == "__main__":
