@@ -109,6 +109,10 @@ def close_long_position(symbol):
         send_telegram_message(f"⚠️ **HATA:** {symbol} için satış yapılamadı!\nHata: {e}")
 
 # Webhook Endpoint (TradingView Webhook ile Çalışacak)
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot çalışıyor!", 200
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
