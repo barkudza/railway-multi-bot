@@ -111,26 +111,38 @@ def close_long_position(symbol):
 # Webhook Endpoint (TradingView Webhook ile Çalışacak)
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.json
-    symbol = data.get("pair")
-    signal = data.get("signal")
+    try:
+        data = request.get_json(force=True)  # JSON formatında zorla al!
+        logging.info(f"📩 Webhook çağrıldı! Gelen veri: {data}")
 
-    if not symbol or not signal:
-        logging.error("Geçersiz veri alındı!")
-        return jsonify({"error": "Invalid data"}), 400
+        if not data:
+            logging.error("🚨 Webhook'a boş veri geldi!")
+            return jsonify({"error": "Boş veri gönderildi!"}), 400
 
-    if symbol not in ALLOWED_PAIRS:
-        logging.error(f"{symbol} işlem listesinde değil!")
-        return jsonify({"error": "Pair not allowed"}), 400
+        symbol = data.get("pair")
+        signal = data.get("signal")
 
-    if signal == "SAT":
-        close_long_position(symbol)
-        logging.info(f"SELL sinyali alındı, {symbol} için pozisyon kapatılıyor.")
-    elif signal == "AL":
-        open_long_position(symbol)
-        logging.info(f"BUY sinyali alındı, {symbol} için long pozisyon açılıyor.")
+        if not symbol or not signal:
+            logging.error(f"❌ Eksik veri alındı! Gelen JSON: {data}")
+            return jsonify({"error": "Eksik veya hatalı veri"}), 400
 
-    return jsonify({"success": True}), 200
+        if symbol not in ALLOWED_PAIRS:
+            logging.error(f"⚠️ {symbol} işlem listesinde değil! Gelen JSON: {data}")
+            return jsonify({"error": "Pair not allowed"}), 400
+
+        if signal == "SAT":
+            close_long_position(symbol)
+            logging.info(f"📉 SELL sinyali alındı, {symbol} için pozisyon kapatılıyor.")
+        elif signal == "AL":
+            open_long_position(symbol)
+            logging.info(f"🚀 BUY sinyali alındı, {symbol} için long pozisyon açılıyor.")
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        logging.error(f"❌ Webhook işlenirken hata oluştu: {e}")
+        return jsonify({"error": "Webhook işlenemedi"}), 500
+
 
 PORT = int(os.environ.get("PORT", 10000))  # Render'ın belirlediği portu al
 
