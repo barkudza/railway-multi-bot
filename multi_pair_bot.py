@@ -1,33 +1,52 @@
 import os
+import logging
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
-import logging
+import requests
+
+# .env Dosyasını Yükle
+load_dotenv()
+
+# Binance API Bilgileri
+API_KEY = os.getenv("API_KEY")
+API_SECRET = os.getenv("API_SECRET")
+
+# Telegram Bot Bilgileri
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Flask App
 app = Flask(__name__)
 
-# Binance API Keys from Environment Variables
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
-
 # Binance Client
 client = Client(API_KEY, API_SECRET)
 
-# İşleme Girecek Coin Çiftleri
-AALLOWED_PAIRS = ["BTCUSDT", "XRPUSDT", "DOGEUSDT", "SOLUSDT", "COWUSDT", "1000SHIBUSDT", "1000BONKUSDT", "FARTCOINUSDT", "1000PEPEUSDT", "JUPUSDT", "DEXEUSDT", "ALGOUSDT", "ADAUSDT", "LINKUSDT", "TRXUSDT", "FILUSDT", "DOTUSDT", "XLMUSDT", "ZENUSDT", "VETUSDT", "ZILUSDT", "JASMYUSDT", "HBARUSDT", "COOKIEUSDT", "CGPTUSDT", "MOVEUSDT", "WLDUSDT", "COWUSDT", "BIOUSDT", "AGLDUSDT", "LQTYUSDT", "DEXEUSDT", "PNUTUSDT", "GOATUSDT", "VIRTUALUSDT", "ZEREBROUSDT", "1000SHIBUSDT", "VVAIFUUSDT", "SONICUSDT", "VELODROMEUSDT", "VANAUSDT", "PENGUUSDT", "FETUSDT", "FARTCOINUSDT"
-]  # İşlem yapmak istediğiniz çiftler
+# İşlem Yapılacak Coin Çiftleri
+ALLOWED_PAIRS = ["BERAUSDT", "LAYERUSDT", "SUSDT"]
 
-# Bot Settings
-POSITION_SIZE_USDT = 10  # Her işlem için kullanılacak bakiye (dolar)
-LEVERAGE = 15  # Kaldıraç oranı
-STOP_LOSS_PERCENT = 0.006  # %0.6 zarar stop-loss
-TAKE_PROFIT_PERCENT = 0.05  # %5 kâr take-profit
+# İşlem Parametreleri
+POSITION_SIZE_USDT = 10  # İşlem başına kullanılacak USDT miktarı
+LEVERAGE = 20  # Kaldıraç
 
-# Logging Settings
+# Logging Ayarları
 logging.basicConfig(level=logging.INFO)
 
-# Get Symbol Precision
+# Telegram Mesajı Gönderme Fonksiyonu
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+    try:
+        response = requests.post(url, json=data)
+        if response.status_code == 200:
+            logging.info(f"Telegram mesajı gönderildi: {message}")
+        else:
+            logging.error(f"Telegram mesajı gönderilemedi: {response.text}")
+    except Exception as e:
+        logging.error(f"Telegram hatası: {e}")
+
+# Sembolün Hassasiyetini Alma
 def get_symbol_precision(symbol):
     exchange_info = client.futures_exchange_info()
     for symbol_info in exchange_info['symbols']:
@@ -37,26 +56,22 @@ def get_symbol_precision(symbol):
                     return int(f['stepSize'].find('1') - 1), float(f['minQty'])
     return 2, 0.1
 
-# Set Leverage for All Pairs
+# Kaldıraç Ayarla
 def set_leverage(symbol):
     try:
         response = client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
-        logging.info(f"Leverage set to {LEVERAGE}x for {symbol}: {response}")
+        logging.info(f"{symbol} için kaldıraç {LEVERAGE}x olarak ayarlandı: {response}")
     except Exception as e:
-        logging.error(f"Error setting leverage for {symbol}: {e}")
+        logging.error(f"{symbol} için kaldıraç ayarlanırken hata oluştu: {e}")
 
-# Open Long Position with Stop Loss and Take Profit
-def open_long_position_with_stop_and_take_profit(symbol):
+# Long Pozisyon Açma (Stop Loss ve Take Profit Yok!)
+def open_long_position(symbol):
     try:
-        # Get current price
         entry_price = float(client.futures_symbol_ticker(symbol=symbol)["price"])
-
-        # Calculate quantity
         quantity = (POSITION_SIZE_USDT * LEVERAGE) / entry_price
         precision, min_qty = get_symbol_precision(symbol)
         quantity = max(round(quantity, precision), min_qty)
 
-        # Open long position
         set_leverage(symbol)
         client.futures_create_order(
             symbol=symbol,
@@ -64,38 +79,16 @@ def open_long_position_with_stop_and_take_profit(symbol):
             type=ORDER_TYPE_MARKET,
             quantity=quantity,
         )
-        logging.info(f"Long position opened for {symbol} with quantity {quantity}.")
-
-        # Place stop loss and take profit orders
-        stop_loss_price = entry_price * (1 - STOP_LOSS_PERCENT)
-        take_profit_price = entry_price * (1 + TAKE_PROFIT_PERCENT)
-
-        client.futures_create_order(
-            symbol=symbol,
-            side=SIDE_SELL,
-            type=ORDER_TYPE_STOP_MARKET,
-            stopPrice=round(stop_loss_price, precision),
-            quantity=quantity,
-        )
-        logging.info(f"Stop loss set at {stop_loss_price} for {symbol}.")
-
-        client.futures_create_order(
-            symbol=symbol,
-            side=SIDE_SELL,
-            type=ORDER_TYPE_LIMIT,
-            price=round(take_profit_price, precision),
-            timeInForce=TIME_IN_FORCE_GTC,
-            quantity=quantity,
-        )
-        logging.info(f"Take profit set at {take_profit_price} for {symbol}.")
-
+        logging.info(f"{symbol} için long pozisyon açıldı. Miktar: {quantity}")
+        send_telegram_message(f"🚀 **ALIM YAPILDI!**\n\n📌 **Sembol:** {symbol}\n📊 **Fiyat:** {entry_price}\n📈 **Miktar:** {quantity}")
+    
     except Exception as e:
-        logging.error(f"Error opening position for {symbol}: {e}")
+        logging.error(f"{symbol} için pozisyon açarken hata oluştu: {e}")
+        send_telegram_message(f"⚠️ **HATA:** {symbol} için alım yapılamadı!\nHata: {e}")
 
-# Close Long Position
+# Long Pozisyon Kapatma
 def close_long_position(symbol):
     try:
-        # Get current position quantity
         positions = client.futures_position_information()
         for position in positions:
             if position["symbol"] == symbol and float(position["positionAmt"]) > 0:
@@ -106,13 +99,16 @@ def close_long_position(symbol):
                     type=ORDER_TYPE_MARKET,
                     quantity=quantity,
                 )
-                logging.info(f"Long position closed for {symbol} with quantity {quantity}.")
+                logging.info(f"{symbol} için long pozisyon kapatıldı. Miktar: {quantity}")
+                send_telegram_message(f"📉 **SATIŞ YAPILDI!**\n\n📌 **Sembol:** {symbol}\n📊 **Miktar:** {quantity}")
                 return
-        logging.info(f"No long position to close for {symbol}.")
+        logging.info(f"{symbol} için açık long pozisyon bulunamadı.")
+    
     except Exception as e:
-        logging.error(f"Error closing long position for {symbol}: {e}")
+        logging.error(f"{symbol} için pozisyon kapatırken hata oluştu: {e}")
+        send_telegram_message(f"⚠️ **HATA:** {symbol} için satış yapılamadı!\nHata: {e}")
 
-# Webhook Route
+# Webhook Endpoint (TradingView Webhook ile Çalışacak)
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -120,19 +116,19 @@ def webhook():
     signal = data.get("signal")
 
     if not symbol or not signal:
-        logging.error("Invalid data received.")
+        logging.error("Geçersiz veri alındı!")
         return jsonify({"error": "Invalid data"}), 400
 
     if symbol not in ALLOWED_PAIRS:
-        logging.error(f"Pair {symbol} is not allowed.")
+        logging.error(f"{symbol} işlem listesinde değil!")
         return jsonify({"error": "Pair not allowed"}), 400
 
     if signal == "SAT":
         close_long_position(symbol)
-        logging.info(f"SELL signal received for {symbol}. Long position closed.")
+        logging.info(f"SELL sinyali alındı, {symbol} için pozisyon kapatılıyor.")
     elif signal == "AL":
-        open_long_position_with_stop_and_take_profit(symbol)
-        logging.info(f"BUY signal received for {symbol}. Long position opened with stop loss and take profit.")
+        open_long_position(symbol)
+        logging.info(f"BUY sinyali alındı, {symbol} için long pozisyon açılıyor.")
 
     return jsonify({"success": True}), 200
 
