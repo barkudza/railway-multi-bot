@@ -24,10 +24,10 @@ app = Flask(__name__)
 client = Client(API_KEY, API_SECRET)
 
 # İşlem Yapılacak Coin Çiftleri
-ALLOWED_PAIRS = ["BERAUSDT", "LAYERUSDT", "SUSDT"]
+ALLOWED_PAIRS = ["BERAUSDT", "LAYERUSDT", "TSTUSDT"]
 
 # İşlem Parametreleri
-POSITION_SIZE_USDT = 10  # İşlem başına kullanılacak USDT miktarı
+POSITION_SIZE_USDT = 5  # İşlem başına kullanılacak USDT miktarı
 LEVERAGE = 20  # Kaldıraç
 
 # Logging Ayarları
